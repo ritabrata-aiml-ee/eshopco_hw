@@ -81,16 +81,16 @@ async def analyze_latency(payload: RequestBody):
         uptimes = [r["uptime_pct"] for r in rows]
 
         result[region] = {
-            "avg_latency": round(float(np.mean(latencies)), 2),
-            "p95_latency": round(float(np.percentile(latencies, 95)), 2),
-            "avg_uptime": round(float(np.mean(uptimes)), 3),
-            "breaches": int(
-                sum(
-                    1
-                    for latency in latencies
-                    if latency > payload.threshold_ms
-                )
-            ),
-        }
+    "avg_latency": float(np.mean(latencies)),
+    "p95_latency": float(np.percentile(latencies, 95)),
+    "avg_uptime": float(np.mean(uptimes)),
+    "breaches": int(
+        sum(
+            1
+            for latency in latencies
+            if latency > payload.threshold_ms
+        )
+    ),
+}
 
     return result
