@@ -1,13 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
 import json
 import numpy as np
 from pathlib import Path
 
 app = FastAPI()
 
-# Enable CORS for POST requests from any origin
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,32 +30,49 @@ class RequestBody(BaseModel):
     threshold_ms: float
 
 
+@app.get("/")
+async def root():
+    return {"status": "ok"}
+
+
+@app.options("/")
+async def options_root():
+    return JSONResponse(
+        content={"status": "ok"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
+
 @app.post("/")
 async def analyze_latency(payload: RequestBody):
 
-    response = {}
+    result = {}
 
     for region in payload.regions:
 
         region_rows = [
             row
             for row in telemetry
-            if row["region"].lower() == region.lower()
+            if row.get("region", "").lower() == region.lower()
         ]
 
         if not region_rows:
-            response[region] = {
+            result[region] = {
                 "avg_latency": 0,
                 "p95_latency": 0,
                 "avg_uptime": 0,
-                "breaches": 0
+                "breaches": 0,
             }
             continue
 
-        latencies = [r["latency_ms"] for r in region_rows]
-        uptimes = [r["uptime_pct"] for r in region_rows]
+        latencies = [row["latency_ms"] for row in region_rows]
+        uptimes = [row["uptime_pct"] for row in region_rows]
 
-        response[region] = {
+        result[region] = {
             "avg_latency": round(float(np.mean(latencies)), 2),
             "p95_latency": round(float(np.percentile(latencies, 95)), 2),
             "avg_uptime": round(float(np.mean(uptimes)), 3),
@@ -63,7 +82,7 @@ async def analyze_latency(payload: RequestBody):
                     for latency in latencies
                     if latency > payload.threshold_ms
                 )
-            )
+            ),
         }
 
-    return response
+    return result
