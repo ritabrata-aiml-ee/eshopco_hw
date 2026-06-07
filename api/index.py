@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -9,7 +9,6 @@ import numpy as np
 
 app = FastAPI()
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,7 +17,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load telemetry data
+
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    response = await call_next(request)
+
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS,HEAD"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+
+    return response
+
+
 DATA_FILE = Path(__file__).parent.parent / "telemetry.json"
 
 with open(DATA_FILE, "r") as f:
@@ -32,24 +42,17 @@ class RequestBody(BaseModel):
 
 @app.get("/")
 async def root():
-    return JSONResponse(
-        content={"status": "ok"},
-        headers={
-            "Access-Control-Allow-Origin": "*"
-        }
-    )
+    return {"status": "ok"}
+
+
+@app.head("/")
+async def head_root():
+    return JSONResponse(content={})
 
 
 @app.options("/")
 async def options_root():
-    return JSONResponse(
-        content={"status": "ok"},
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        },
-    )
+    return JSONResponse(content={"status": "ok"})
 
 
 @app.post("/")
@@ -59,23 +62,23 @@ async def analyze_latency(payload: RequestBody):
 
     for region in payload.regions:
 
-        region_rows = [
+        rows = [
             row
             for row in telemetry
-            if row.get("region", "").lower() == region.lower()
+            if row["region"].lower() == region.lower()
         ]
 
-        if not region_rows:
+        if not rows:
             result[region] = {
                 "avg_latency": 0,
                 "p95_latency": 0,
                 "avg_uptime": 0,
-                "breaches": 0
+                "breaches": 0,
             }
             continue
 
-        latencies = [row["latency_ms"] for row in region_rows]
-        uptimes = [row["uptime_pct"] for row in region_rows]
+        latencies = [r["latency_ms"] for r in rows]
+        uptimes = [r["uptime_pct"] for r in rows]
 
         result[region] = {
             "avg_latency": round(float(np.mean(latencies)), 2),
@@ -90,11 +93,4 @@ async def analyze_latency(payload: RequestBody):
             ),
         }
 
-    return JSONResponse(
-        content=result,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        },
-    )
+    return result
