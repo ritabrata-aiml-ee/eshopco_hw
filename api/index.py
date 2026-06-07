@@ -9,15 +9,14 @@ import numpy as np
 
 app = FastAPI()
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,
     allow_methods=["POST", "GET", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
     expose_headers=["Access-Control-Allow-Origin"],
 )
-
 
 @app.middleware("http")
 async def add_cors_headers(request: Request, call_next):
@@ -30,6 +29,7 @@ async def add_cors_headers(request: Request, call_next):
     return response
 
 
+# Load telemetry data
 DATA_FILE = Path(__file__).parent.parent / "telemetry.json"
 
 with open(DATA_FILE, "r") as f:
@@ -53,45 +53,53 @@ async def head_root():
 
 @app.options("/")
 async def options_root():
-    return JSONResponse(content={"status": "ok"})
+    return {"status": "ok"}
 
 
 @app.post("/")
 async def analyze_latency(payload: RequestBody):
 
-    result = {}
+    regions_output = []
 
     for region in payload.regions:
 
-        rows = [
+        region_rows = [
             row
             for row in telemetry
-            if row["region"].lower() == region.lower()
+            if row.get("region", "").lower() == region.lower()
         ]
 
-        if not rows:
-            result[region] = {
-                "avg_latency": 0,
-                "p95_latency": 0,
-                "avg_uptime": 0,
-                "breaches": 0,
-            }
+        if not region_rows:
+            regions_output.append(
+                {
+                    "region": region,
+                    "avg_latency": 0.0,
+                    "p95_latency": 0.0,
+                    "avg_uptime": 0.0,
+                    "breaches": 0,
+                }
+            )
             continue
 
-        latencies = [r["latency_ms"] for r in rows]
-        uptimes = [r["uptime_pct"] for r in rows]
+        latencies = [row["latency_ms"] for row in region_rows]
+        uptimes = [row["uptime_pct"] for row in region_rows]
 
-        result[region] = {
-    "avg_latency": float(np.mean(latencies)),
-    "p95_latency": float(np.percentile(latencies, 95)),
-    "avg_uptime": float(np.mean(uptimes)),
-    "breaches": int(
-        sum(
-            1
-            for latency in latencies
-            if latency > payload.threshold_ms
+        regions_output.append(
+            {
+                "region": region,
+                "avg_latency": float(np.mean(latencies)),
+                "p95_latency": float(np.percentile(latencies, 95)),
+                "avg_uptime": float(np.mean(uptimes)),
+                "breaches": int(
+                    sum(
+                        1
+                        for latency in latencies
+                        if latency > payload.threshold_ms
+                    )
+                ),
+            }
         )
-    ),
-}
 
-    return result
+    return {
+        "regions": regions_output
+    }
