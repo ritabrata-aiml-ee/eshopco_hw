@@ -3,9 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from pathlib import Path
 import json
 import numpy as np
-from pathlib import Path
 
 app = FastAPI()
 
@@ -32,7 +32,12 @@ class RequestBody(BaseModel):
 
 @app.get("/")
 async def root():
-    return {"status": "ok"}
+    return JSONResponse(
+        content={"status": "ok"},
+        headers={
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
 
 
 @app.options("/")
@@ -65,7 +70,7 @@ async def analyze_latency(payload: RequestBody):
                 "avg_latency": 0,
                 "p95_latency": 0,
                 "avg_uptime": 0,
-                "breaches": 0,
+                "breaches": 0
             }
             continue
 
@@ -85,4 +90,11 @@ async def analyze_latency(payload: RequestBody):
             ),
         }
 
-    return result
+    return JSONResponse(
+        content=result,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
